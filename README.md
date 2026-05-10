@@ -1,54 +1,34 @@
-# BDD — Postgres pour GFP
+# BDD — Modèle de données et ops Postgres
 
-Manifests Kubernetes pour Postgres 16, déployé dans le namespace `gfp` du cluster k3s (voir repo [Kubernetes](https://github.com/tdrula/Kubernetes)).
+Documentation et outils autour de la base Postgres consommée par l'API Symfony (`GFP`) et l'API Go (`GFP_GO`).
 
-## Layout
+## Périmètre du repo
 
-```
-kubernetes/
-├── postgres-deployment.yaml    Deployment + Service ClusterIP
-└── postgres-pvc.yaml           PVC 5Gi sur storageClass local-path (k3s)
-```
+Ce repo **ne contient pas** les manifests Kubernetes de Postgres — ils vivent dans le repo [Kubernetes](https://github.com/tdrula/Kubernetes), sous `manifests/database/postgres/`. Le déploiement de la base et le `make apply-database` se font depuis là-bas.
 
-## Setup initial
+Ce repo contient (à terme) :
 
-```bash
-# 1. Créer le secret avec les credentials (une seule fois)
-make secret-create
-# Input :
-#   POSTGRES_DB:       gfp
-#   POSTGRES_USER:     gfp
-#   POSTGRES_PASSWORD: <choisir>
+- `docs/` — schéma logique, ERD, conventions de nommage, contraintes
+- `scripts/` — scripts de seed, de backup/restore standalone, d'import de jeux de données
+- `migrations-notes/` — notes sur les migrations majeures (raisons, impacts perfs)
 
-# 2. Appliquer les manifests
-make apply
+Les **migrations** Doctrine restent dans le repo `GFP` (couplage fort avec les entités Symfony, exécutées par `make db-migrate`).
 
-# 3. Vérifier
-make status
-```
+## Connexion depuis les APIs
 
-## Connexion depuis l'API
+Format DATABASE_URL injecté via le Secret `gfp-secret` (cf. README du repo Kubernetes) :
 
-L'API consomme `DATABASE_URL` (cf. repo `GFP`). Format attendu :
+| API | Format URL | Driver |
+|---|---|---|
+| Symfony | `postgresql://user:pass@host:5432/db?serverVersion=16&charset=utf8` | Doctrine DBAL |
+| Go | `postgres://user:pass@host:5432/db?sslmode=disable` | pgx |
 
-```
-postgresql://<user>:<password>@postgres.gfp.svc.cluster.local:5432/<db>?serverVersion=16&charset=utf8
-```
+Hostname interne du cluster : `postgres.gfp.svc.cluster.local` (résolu par CoreDNS).
 
-Le hostname `postgres.gfp.svc.cluster.local` est résolu par CoreDNS — il pointe sur le `Service postgres` défini ici.
+## Choix techniques (résumé)
 
-## Choix techniques
-
-- **Deployment** plutôt que **StatefulSet** : 1 seul replica + PVC `RWO` + `strategy: Recreate` suffisent. StatefulSet aurait été pertinent en HA multi-nœuds.
-- **`subPath: pgdata`** : évite l'erreur "directory not empty" quand Postgres rencontre `lost+found` à la racine du volume.
-- **`storageClassName: local-path`** : storage class par défaut de k3s, provisionne sur le disque du nœud.
-
-## Secret à créer hors-repo
-
-Le secret `postgres-secret` n'est jamais committé. Il contient :
-
-- `POSTGRES_DB`
-- `POSTGRES_USER`
-- `POSTGRES_PASSWORD`
-
-Et est référencé via `envFrom: secretRef` dans le Deployment.
+- **Postgres 16** sur image `postgres:16-alpine`
+- **Storage** : PVC 5Gi sur `local-path` (storage class par défaut de k3s)
+- **Deployment** plutôt que **StatefulSet** (1 replica suffit ici, RWO + `strategy: Recreate`)
+- **`subPath: pgdata`** sur le mount pour éviter l'erreur "directory not empty"
+- Credentials en **Secret** `postgres-secret`, jamais committés
