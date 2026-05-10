@@ -4,15 +4,37 @@ Documentation et outils autour de la base Postgres consommée par l'API Symfony 
 
 ## Périmètre du repo
 
-Ce repo **ne contient pas** les manifests Kubernetes de Postgres — ils vivent dans le repo [Kubernetes](https://github.com/tdrula/Kubernetes), sous `manifests/database/postgres/`. Le déploiement de la base et le `make apply-database` se font depuis là-bas.
+Ce repo concerne tout ce qui touche à la **base de données elle-même** : faire tourner Postgres en local, documenter le modèle, scripts d'ops.
 
-Ce repo contient (à terme) :
+Il **ne contient pas** les manifests Kubernetes — ils vivent dans le repo [Kubernetes](https://github.com/tdrula/Kubernetes), sous `manifests/database/postgres/`. Le déploiement *en cluster* se fait depuis là-bas.
 
-- `docs/` — schéma logique, ERD, conventions de nommage, contraintes
-- `scripts/` — scripts de seed, de backup/restore standalone, d'import de jeux de données
-- `migrations-notes/` — notes sur les migrations majeures (raisons, impacts perfs)
+Contenu :
 
-Les **migrations** Doctrine restent dans le repo `GFP` (couplage fort avec les entités Symfony, exécutées par `make db-migrate`).
+- `docker-compose.yml` + `Makefile` — Postgres standalone pour dev local
+- `init/` — scripts SQL exécutés au premier démarrage du container (seed, extensions…)
+- (à venir) `docs/` — schéma logique, ERD, conventions
+- (à venir) `scripts/` — backup/restore standalone, imports de jeux de données
+
+Les **migrations Doctrine** restent dans le repo `GFP` (couplage fort avec les entités Symfony, exécutées par `make db-migrate`).
+
+## Lancer Postgres en local
+
+```bash
+make up
+make ready          # attend que Postgres accepte des connexions
+make psql           # shell psql interactif
+make logs           # tail des logs
+make down           # arrête (données conservées dans le volume)
+make nuke           # arrête + supprime le volume (perd toutes les données)
+```
+
+Override des credentials par défaut :
+
+```bash
+POSTGRES_DB=foo POSTGRES_USER=bar POSTGRES_PASSWORD=baz make up
+```
+
+L'API Symfony (`GFP`) et l'API Go (`GFP_GO`) consomment ce Postgres via `DATABASE_URL`. Voir leurs `.env.local` respectifs.
 
 ## Connexion depuis les APIs
 
