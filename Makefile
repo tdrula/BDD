@@ -6,7 +6,7 @@ USER ?= gfp
 GREEN = \033[0;32m
 NC = \033[0m
 
-.PHONY: help up down restart logs psql backup ready
+.PHONY: help up down restart logs psql backup backup-list restore ready nuke
 
 help: ## Liste les cibles
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "$(GREEN)%-12s$(NC) %s\n", $$1, $$2}'
@@ -35,10 +35,30 @@ logs: ## Tail des logs Postgres
 psql: ## Ouvre un shell psql sur la base
 	docker exec -it $(CONTAINER) psql -U $(USER) -d $(DB)
 
-backup: ## Dump dans ./backup-YYYYMMDD-HHMMSS.sql
+## —— Backups ——————————————————————————————————————————————————————
+# Tous les backups vivent HORS du repo (pas committés) dans ~/Backups/postgres/
+BACKUP_DIR = $(HOME)/Backups/postgres
+
+backup: ## Dump la base courante dans ~/Backups/postgres/gfp-YYYYMMDD-HHMMSS.sql
+	@mkdir -p $(BACKUP_DIR)
 	@ts=$$(date +%Y%m%d-%H%M%S); \
-	docker exec $(CONTAINER) pg_dumpall -U $(USER) > backup-$$ts.sql; \
-	echo "$(GREEN)Backup écrit dans ./backup-$$ts.sql$(NC)"
+	out=$(BACKUP_DIR)/gfp-$$ts.sql; \
+	docker exec $(CONTAINER) pg_dump -U $(USER) -d $(DB) --no-owner --no-acl --clean --if-exists > $$out; \
+	echo "$(GREEN)Backup → $$out ($$(du -h $$out | cut -f1))$(NC)"
+
+backup-list: ## Liste les backups disponibles
+	@ls -lh $(BACKUP_DIR)/*.sql 2>/dev/null || echo "Aucun backup dans $(BACKUP_DIR)"
+
+restore: ## Restaure depuis un dump : make restore FILE=~/Backups/postgres/gfp-XXXX.sql
+	@if [ -z "$(FILE)" ]; then \
+		echo "Usage: make restore FILE=$(BACKUP_DIR)/gfp-YYYYMMDD-HHMMSS.sql"; \
+		echo ""; echo "Backups disponibles :"; \
+		ls -1t $(BACKUP_DIR)/*.sql 2>/dev/null | head -5; \
+		exit 1; \
+	fi
+	@echo "$(GREEN)Restoring from $(FILE)...$(NC)"
+	docker exec -i $(CONTAINER) psql -U $(USER) -d $(DB) < $(FILE)
+	@echo "$(GREEN)Restore done.$(NC)"
 
 ## —— Reset complet (destructif) ——————————————————————————————————
 nuke: ## Supprime conteneur ET volume (DESTRUCTIF — perd toutes les données locales)

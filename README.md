@@ -36,6 +36,30 @@ POSTGRES_DB=foo POSTGRES_USER=bar POSTGRES_PASSWORD=baz make up
 
 L'API Symfony (`GFP`) et l'API Go (`GFP_GO`) consomment ce Postgres via `DATABASE_URL`. Voir leurs `.env.local` respectifs.
 
+## Backups
+
+Les backups vivent **hors du repo** dans `~/Backups/postgres/` (jamais committés).
+
+```bash
+make backup                                              # crée ~/Backups/postgres/gfp-YYYYMMDD-HHMMSS.sql
+make backup-list                                         # liste les backups disponibles
+make restore FILE=~/Backups/postgres/gfp-XXXXXX.sql      # restaure depuis un dump
+```
+
+Workflow typique :
+
+```bash
+# Avant de toucher à la BDD
+make backup
+
+# Si quelque chose foire
+make nuke           # détruit le container + volume
+make up             # repart sur du frais
+make restore FILE=$(ls -1t ~/Backups/postgres/*.sql | head -1)
+```
+
+Le dump est généré avec `--no-owner --no-acl --clean --if-exists` : restorable dans n'importe quelle base/user, idempotent (drop + recreate les tables).
+
 ## Connexion depuis les APIs
 
 Format DATABASE_URL injecté via le Secret `gfp-secret` (cf. README du repo Kubernetes) :
