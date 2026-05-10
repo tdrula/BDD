@@ -1,0 +1,10 @@
+# OS / IDE
+.DS_Store
+.idea/
+.vscode/
+
+# Secrets
+*.secret.yaml
+secret.yaml
+.env
+.env.local
