@@ -1,7 +1,8 @@
 DOCKER_COMPOSE = docker compose
 CONTAINER = gfp_postgres
-DB ?= gfp
-USER ?= gfp
+# NB : on évite le nom `USER` car c'est une env var shell (= login macOS)
+PG_DB ?= gfp
+PG_USER ?= gfp
 
 GREEN = \033[0;32m
 NC = \033[0m
@@ -23,7 +24,7 @@ restart: down up ## Redémarre
 
 ready: ## Attend que Postgres soit prêt à accepter des connexions
 	@for i in 1 2 3 4 5 6 7 8 9 10; do \
-		docker exec $(CONTAINER) pg_isready -U $(USER) >/dev/null 2>&1 && echo "ready" && exit 0; \
+		docker exec $(CONTAINER) pg_isready -U $(PG_USER) >/dev/null 2>&1 && echo "ready" && exit 0; \
 		sleep 1; \
 	done; \
 	echo "timeout"; exit 1
@@ -33,7 +34,7 @@ logs: ## Tail des logs Postgres
 	$(DOCKER_COMPOSE) logs -f postgres
 
 psql: ## Ouvre un shell psql sur la base
-	docker exec -it $(CONTAINER) psql -U $(USER) -d $(DB)
+	docker exec -it $(CONTAINER) psql -U $(PG_USER) -d $(PG_DB)
 
 ## —— Backups ——————————————————————————————————————————————————————
 # Tous les backups vivent HORS du repo (pas committés) dans ~/Backups/postgres/
@@ -43,7 +44,7 @@ backup: ## Dump la base courante dans ~/Backups/postgres/gfp-YYYYMMDD-HHMMSS.sql
 	@mkdir -p $(BACKUP_DIR)
 	@ts=$$(date +%Y%m%d-%H%M%S); \
 	out=$(BACKUP_DIR)/gfp-$$ts.sql; \
-	docker exec $(CONTAINER) pg_dump -U $(USER) -d $(DB) --no-owner --no-acl --clean --if-exists > $$out; \
+	docker exec $(CONTAINER) pg_dump -U $(PG_USER) -d $(PG_DB) --no-owner --no-acl --clean --if-exists > $$out; \
 	echo "$(GREEN)Backup → $$out ($$(du -h $$out | cut -f1))$(NC)"
 
 backup-list: ## Liste les backups disponibles
@@ -57,7 +58,7 @@ restore: ## Restaure depuis un dump : make restore FILE=~/Backups/postgres/gfp-X
 		exit 1; \
 	fi
 	@echo "$(GREEN)Restoring from $(FILE)...$(NC)"
-	docker exec -i $(CONTAINER) psql -U $(USER) -d $(DB) < $(FILE)
+	docker exec -i $(CONTAINER) psql -U $(PG_USER) -d $(PG_DB) < $(FILE)
 	@echo "$(GREEN)Restore done.$(NC)"
 
 ## —— Reset complet (destructif) ——————————————————————————————————
